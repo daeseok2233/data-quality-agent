@@ -2,9 +2,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List
+from datetime import datetime
 
 import pandas as pd
-
 from . import settings
 
 
@@ -28,6 +28,9 @@ class DatetimeSummary:
     datetime_columns: List[str]
     parse_success_count: Dict[str, int]
     parse_fail_count: Dict[str, int]
+    # 새로 추가된 필드들
+    today_match_count: Dict[str, int]   # 오늘 날짜와 일치하는 값 개수
+    non_today_count: Dict[str, int]     # 오늘이 아닌(과거/미래) 값 개수
 
 
 @dataclass
@@ -93,27 +96,56 @@ def check_schema(df: pd.DataFrame) -> SchemaSummary:
 
 
 def check_datetime_columns(df: pd.DataFrame) -> DatetimeSummary:
+    """
+    DATETIME_COLUMNS에 대해:
+    1) 파싱 성공/실패 건수
+    2) 파싱 성공 값 중 '오늘 날짜'와 일치하는 건수
+    3) 파싱 성공 값 중 '오늘이 아닌' 건수
+    를 계산한다.
+    """
     parse_success: Dict[str, int] = {}
     parse_fail: Dict[str, int] = {}
+    today_match: Dict[str, int] = {}
+    non_today: Dict[str, int] = {}
+
+    today = datetime.today().date()
 
     for col in settings.DATETIME_COLUMNS:
         if col not in df.columns:
             parse_success[col] = 0
             parse_fail[col] = 0
+            today_match[col] = 0
+            non_today[col] = 0
             continue
 
+        # 문자열로 변환 후 파싱 시도
         series = df[col].astype(str)
-        parsed = pd.to_datetime(series, errors="coerce", infer_datetime_format=True)
-        success = parsed.notna().sum()
-        fail = parsed.isna().sum()
+        parsed = pd.to_datetime(
+            series,
+            errors="coerce",
+            infer_datetime_format=True,
+        )
 
-        parse_success[col] = int(success)
-        parse_fail[col] = int(fail)
+        success_mask = parsed.notna()
+        success = int(success_mask.sum())
+        fail = int((~success_mask).sum())
+
+        # 파싱 성공한 값만 대상으로 오늘/비오늘 분리
+        valid_dates = parsed[success_mask].dt.date
+        today_count = int((valid_dates == today).sum())
+        non_today_count = int((valid_dates != today).sum())
+
+        parse_success[col] = success
+        parse_fail[col] = fail
+        today_match[col] = today_count
+        non_today[col] = non_today_count
 
     return DatetimeSummary(
         datetime_columns=settings.DATETIME_COLUMNS,
         parse_success_count=parse_success,
         parse_fail_count=parse_fail,
+        today_match_count=today_match,
+        non_today_count=non_today,
     )
 
 
@@ -165,3 +197,4 @@ def run_quality_checks(df: pd.DataFrame) -> QualityReport:
         datetime=dt_summary,
         outlier=outlier,
     )
+

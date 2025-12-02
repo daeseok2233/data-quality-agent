@@ -8,6 +8,10 @@ from textwrap import indent
 from .quality import QualityReport
 from . import settings
 
+try:
+    from .ai_reporting import generate_ai_summary
+except ImportError:
+    generate_ai_summary = None  # AI 리포트 생성 기능이 없는 경우
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
@@ -104,6 +108,21 @@ def save_markdown_report(report: QualityReport, dt: datetime | None = None) -> P
     file_path = settings.REPORT_DIR / file_name
 
     md = generate_markdown_from_report(report, dt=dt)
+    
+    print("DEBUG:", settings.ENABLE_AI_REPORT, bool(settings.OPENAI_API_KEY), generate_ai_summary)
+
+    #  AI 요약 리포트 추가 
+    if (
+        settings.ENABLE_AI_REPORT
+        and settings.OPENAI_API_KEY
+        and generate_ai_summary is not None
+    ):
+        try:
+            ai_md = generate_ai_summary(report)
+            md += "\n\n---\n\n## 6. AI 요약 리포트\n\n" + ai_md + "\n"
+        except Exception as e:
+            md += f"\n\n---\n\n**[AI 요약 리포트 생성 실패]**: {e}\n"
+
     with file_path.open("w", encoding="utf-8") as f:
         f.write(md)
 

@@ -13,14 +13,17 @@ load_dotenv(BASE_DIR / ".env")
 DATA_DIR = BASE_DIR / "data"
 REPORT_DIR = BASE_DIR / "reports"
 
-# 파일 이름 패턴 : sales_YYYYMMDD.csv
+# 파일 이름 패턴 : sales_YYYY_MM_DD.csv
 FILE_PATTERN = "sales_{date}.csv"
 
-# 스키마/컬럼 관련 설정 
+# 👉 ABC Shop 스키마 기준
 REQUIRED_COLUMNS = [
     "order_id",
-    "customer_id",
     "order_date",
+    "customer_id",
+    "product_id",
+    "quantity",
+    "unit_price",
     "amount",
 ]
 
@@ -28,7 +31,10 @@ DATETIME_COLUMNS = [
     "order_date",
 ]
 
+# 👉 숫자형 컬럼 (비즈니스 룰 / 이상치 검사 대상)
 NUMERIC_COLUMNS = [
+    "quantity",
+    "unit_price",
     "amount",
 ]
 

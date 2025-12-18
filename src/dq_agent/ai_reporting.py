@@ -1,4 +1,3 @@
-# src/dq_agent/ai_reporting.py
 from __future__ import annotations
 
 import json
@@ -14,10 +13,6 @@ _client: Optional[OpenAI] = None
 
 
 def get_client() -> OpenAI:
-    """
-    OpenAI 클라이언트를 lazy하게 생성해서 재사용.
-    API 키가 없으면 RuntimeError를 발생시킨다.
-    """
     global _client
     if _client is not None:
         return _client
@@ -31,59 +26,78 @@ def get_client() -> OpenAI:
 
 def generate_ai_summary(report: QualityReport) -> str:
     """
-    QualityReport 객체를 받아서,
-    비전문가가 읽기 좋은 한국어 AI 리포트를 마크다운 형식으로 생성한다.
+    ✅ '요약' + '권장 액션'만 출력 (짧고 명확)
+    ✅ 검사 범위는 4개만:
+    - 결측
+    - 중복
+    - 이상치(IQR)
+    - 비즈니스 룰 위반(0/음수, 금액 불일치, 날짜 문제 포함)
     """
     client = get_client()
     report_dict = report.to_dict()
-
-    # JSON으로 품질 리포트 내용을 통째로 넘겨주고, 그걸 요약해 달라고 요청
     report_json = json.dumps(report_dict, ensure_ascii=False, indent=2)
 
     prompt = f"""
-당신은 데이터 품질 담당자입니다.
+당신은 데이터 품질(Data Quality) 담당자입니다.
 아래 JSON은 하루치 CSV 데이터에 대한 품질 점검 결과입니다.
 
-이 JSON을 바탕으로, 비전문가도 이해할 수 있는 한국어 리포트를 작성해 주세요.
+이 리포트의 목적은 "조언"이 아니라,
+실무에서 바로 적용할 수 있는 **데이터 처리 정책**을 제시하는 것입니다.
 
-요구사항:
-1. 마크다운 형식으로 작성해주세요.
-2. 다음과 같은 섹션 구조를 지켜주세요:
+이 프로젝트는 아래 4가지 품질 신호만 다룹니다:
+1) 결측(missing)
+2) 중복(duplicates)
+3) 이상치(outlier, IQR)
+4) 비즈니스 룰 위반(business_rule)
+   - 0/음수 값
+   - amount 불일치(amount != quantity * unit_price)
+   - 날짜 형식 오류(invalid_date_format)
+   - 기준일 불일치(non_base_date)
+
+⚠️ 매우 중요한 작성 규칙:
+- "검토하세요", "고려하세요", "강화하세요" 같은 **조언형 표현을 사용하지 마세요**.
+- 각 항목은 반드시 **명확한 처리 기준(정책)** 형태로 작성하세요.
+- 문장은 "~한다", "~제외한다", "~분리한다"처럼 **결정형**으로 끝나야 합니다.
+- 실제 운영·분석 단계에서 바로 실행 가능한 행동만 작성하세요.
+- JSON에 명시적으로 존재하지 않는 비즈니스 의미(예: 환불, 취소)는 절대 단정하지 마세요.
+- 0 또는 음수 값은 의미 해석을 하지 말고,
+  "정상 데이터에서 제외한다" 또는 "별도 검토 대상으로 분리한다"처럼 중립적으로 표현하세요.
+- '환불', '취소'라는 단어는 JSON에 해당 컬럼이나 플래그가 없는 한 사용하지 마세요.
+
+출력 형식은 반드시 아래 두 섹션만 포함해야 합니다.
 
 ## 요약
-- 전체 데이터 품질 상태를 3~5줄로 요약합니다.
+- 3~5줄
+- 전체 데이터 품질 상태와 가장 중요한 리스크를 요약
+- 수치(건수/비율)를 반드시 포함
 
-## 상세 분석
-- 결측치가 많은 컬럼 위주로 설명합니다.
-- 누락된 필수 컬럼, 추가된 컬럼이 있다면 그 의미를 설명합니다.
-- 날짜/시간 파싱 실패가 많은 컬럼이 있다면 그 영향과 원인을 추정합니다.
-- 이상치가 많은 수치 컬럼이 있다면 어떤 조치가 필요한지 설명합니다.
+## 권장 데이터 처리 정책
+- 5~8개의 bullet point
+- 각 bullet은 하나의 **명확한 정책 문장**
+- 조언형 표현 금지
+- 비즈니스 의미를 단정하지 말 것
 
-## 권장 액션
-- 내일 또는 가까운 시일 내에 취하면 좋을 조치들을 bullet point로 3~5개 제안합니다.
-- 운영/데이터/분석 관점에서 도움이 될만한 행동을 제안해주세요.
-
-가능하면 JSON 안의 수치(건수, 비율 등)를 적절히 활용해 주세요.
+예시(형식 참고용, 의미 단정 금지):
+- "amount 불일치 행은 분석 대상에서 제외한다."
+- "0 또는 음수 수량, 단가, 금액 행은 정상 주문 데이터로 간주하지 않는다."
+- "날짜 형식 오류 행은 분석 대상에서 제외한다."
 
 아래는 품질 점검 결과 JSON입니다:
 
 ```json
 {report_json}
+```
 """
     response = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": "너는 데이터 품질 분석가야. 비개발자도 이해할 수 있는 리포트를 한국어로 작성해.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        temperature=0.3,
+    model=settings.OPENAI_MODEL,
+    messages=[
+    {"role": "system", "content": "너는 데이터 품질 분석가야. 비개발자도 이해할 수 있게 짧고 명확하게 써."},
+    {"role": "user", "content": prompt},
+    ],
+    temperature=0.2,
     )
-
     content = response.choices[0].message.content
     return content.strip() if content else ""
+
+  
+  

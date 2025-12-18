@@ -37,8 +37,8 @@ def run_for_date(dt: datetime | None = None) -> QualityReport:
         save_markdown_report(report, dt=dt)
         return report
 
-    # 품질 점검 실행
-    report = run_quality_checks(df)
+    # 품질 점검 실행 👉 날짜 정보 함께 전달
+    report = run_quality_checks(df, dt=dt)
 
     # 결과 저장 (JSON + Markdown)
     save_json_report(report, dt=dt)

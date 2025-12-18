@@ -7,7 +7,7 @@ import pandas as pd
 
 from . import settings
 from .quality import QualityReport, run_quality_checks
-from .reporting import save_json_report, save_markdown_report
+from .reporting import save_json_report, save_markdown_report, save_html_from_md
 
 
 def run_for_date(dt: datetime | None = None) -> QualityReport:
@@ -42,7 +42,11 @@ def run_for_date(dt: datetime | None = None) -> QualityReport:
 
     # 결과 저장 (JSON + Markdown)
     save_json_report(report, dt=dt)
-    save_markdown_report(report, dt=dt)
+    md_path = save_markdown_report(report, dt=dt)
+
+    # Markdown -> HTML 변환 추가
+    html_path = md_path.with_suffix(".html")
+    save_html_from_md(md_path, html_path)
     return report
 
 

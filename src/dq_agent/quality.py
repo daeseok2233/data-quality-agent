@@ -133,6 +133,56 @@ def collect_duplicate_rows(df: pd.DataFrame) -> List[Dict[str, Any]]:
         rows.append(row_dict)
     return rows
 
+def collect_outlier_rows_iqr(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """
+    IQR 기준으로 이상치인 '행'을 수집해서 반환.
+    - 여러 컬럼에서 이상치인 경우 issues에 누적: ["outlier:quantity", "outlier:amount"]
+    - settings.NUMERIC_COLUMNS 기준으로 탐지
+    """
+    rows_by_index: Dict[Any, Dict[str, Any]] = {}
+
+    for col in settings.NUMERIC_COLUMNS:
+        if col not in df.columns:
+            continue
+
+        # 숫자 변환 (원본 인덱스 유지)
+        s = pd.to_numeric(df[col], errors="coerce")
+        valid = s.dropna()
+        if valid.empty:
+            continue
+
+        q1 = valid.quantile(0.25)
+        q3 = valid.quantile(0.75)
+        iqr = q3 - q1
+        k = settings.OUTLIER_IQR_MULTIPLIER
+
+        # iqr=0이면 기준이 무의미해질 수 있으니 스킵(원하면 처리 방식 변경 가능)
+        if pd.isna(iqr) or iqr == 0:
+            continue
+
+        lower = q1 - k * iqr
+        upper = q3 + k * iqr
+
+        mask = (s < lower) | (s > upper)
+        outlier_idx = df.index[mask.fillna(False)]
+
+        for idx in outlier_idx:
+            if idx not in rows_by_index:
+                row_dict = df.loc[idx].to_dict()
+                row_dict["row_index"] = int(idx) if isinstance(idx, int) else idx
+                row_dict["issues"] = []
+                rows_by_index[idx] = row_dict
+
+            rows_by_index[idx]["issues"].append(f"outlier:{col}")
+
+    # 보기 좋게 row_index 기준 정렬 (정수 인덱스일 때)
+    rows = list(rows_by_index.values())
+    try:
+        rows.sort(key=lambda x: x.get("row_index", 0))
+    except Exception:
+        pass
+
+    return rows
 
 def collect_business_rule_rows(
     df: pd.DataFrame,
@@ -213,6 +263,7 @@ def run_quality_checks(df: pd.DataFrame, dt: Optional[datetime] = None) -> Quali
     row_issues = {
         "missing": collect_missing_rows(df),
         "duplicates": collect_duplicate_rows(df),
+        "outliers": collect_outlier_rows_iqr(df),
         "business_rule": collect_business_rule_rows(df, file_dt=dt),
     }
 

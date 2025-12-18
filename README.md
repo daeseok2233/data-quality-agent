@@ -1,4 +1,4 @@
-# dq-agent  
+[quality_report_2025_12_18.html](https://github.com/user-attachments/files/24229470/quality_report_2025_12_18.html)# dq-agent  
 ### Daily Data Quality Automation Agent
 
 **매일 유입되는 CSV 데이터를 대상으로  
@@ -70,6 +70,8 @@ order_id,order_date,customer_id,product_id,quantity,unit_price,amount
 
 - `reports/quality_report_YYYY_MM_DD.md`
 - `reports/quality_report_YYYY_MM_DD.json`
+- `reports/quality_report_YYYY_MM_DD.html`
+
   
 ---
 
